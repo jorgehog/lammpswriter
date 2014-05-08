@@ -2,10 +2,14 @@
 #include <sys/types.h>
 #include <armadillo>
 
+//Defining NDEBUG removes all checks (see list in the main function).
+//#define NDEBUG
+
 #include "lammpswriter/lammpswriter.h"
 
 using namespace arma;
 using namespace std;
+
 
 void dumpLammps(const uint frameNumber, const uint nParticles, const mat &pos, const mat &vel, const vec &type);
 
@@ -19,6 +23,7 @@ int main()
      * 3. The file is properly handled between each frame.
      *
      */
+
 
     //Set the system size once and for all.
     lammpswriter::setSystemSize(1, 1, 1);
