@@ -12,12 +12,15 @@ class lammpswriter
 
 public:
 
+    lammpswriter()
+    {
+
+    }
+
     lammpswriter(const uint frameNumber, const uint nParticles) :
         m_nParticles(nParticles),
         m_frameNumber(frameNumber)
     {
-        m_chunkLength = m_nParticles*m_nParticleProperties;
-
         initializeFile();
 
         dumpHeader();
@@ -28,13 +31,37 @@ public:
         finalize();
     }
 
+    void initializeNewFile(const uint frameNumber, const uint nParticles)
+    {
+        m_frameNumber = frameNumber;
 
-    static void setSystemSize(const uint systemSizeX,
-                              const uint systemSizeY,
-                              const uint systemSizeZ,
-                              const uint systemSizeX_start = 0,
-                              const uint systemSizeY_start = 0,
-                              const uint systemSizeZ_start = 0)
+        m_nParticles = nParticles;
+
+#ifndef NDEBUG
+        _checkIfFileOpen();
+#endif
+
+        initializeFile();
+
+        dumpHeader();
+    }
+
+    void finalize()
+    {
+
+#ifndef NDEBUG
+        _checkParticlePropertySize();
+#endif
+        m_file.close();
+
+    }
+
+    static void setSystemSize(const double systemSizeX,
+                              const double systemSizeY,
+                              const double systemSizeZ,
+                              const double systemSizeX_start = 0,
+                              const double systemSizeY_start = 0,
+                              const double systemSizeZ_start = 0)
     {
         m_systemSizeX = systemSizeX;
         m_systemSizeY = systemSizeY;
@@ -83,11 +110,17 @@ public:
     template<typename T>
     void write(const T &val)
     {
-        std::cout << "dumping " << val << " of size " << sizeof(val) << std::endl;
+#ifndef NDEBUG
+        _checkIfFileClosed();
+        _safeGuardCounter++;
+#endif
+
         m_file.write(reinterpret_cast<const char*>(&val), sizeof(val));
     }
 
 private:
+
+    static uint _safeGuardCounter;
 
     static double m_systemSizeX_start;
     static double m_systemSizeY_start;
@@ -106,14 +139,11 @@ private:
     static string m_prefix;
     static string m_path;
 
-    static const uint m_nChunks;
-    static  uint m_chunkLength;
-
     ofstream m_file;
 
-    const uint &m_nParticles;
+    uint m_nParticles;
 
-    const uint &m_frameNumber;
+    uint m_frameNumber;
 
 
     void initializeFile()
@@ -126,6 +156,14 @@ private:
 
     void dumpHeader()
     {
+
+#ifndef NDEBUG
+        _checkSystemSize();
+#endif
+
+        const uint chunkLength = m_nParticles*m_nParticleProperties;
+        const uint nChunks = 1;
+
         write(m_frameNumber,
               m_nParticles,
               m_systemSizeX_start,
@@ -138,17 +176,61 @@ private:
               m_yShear,
               m_zShear,
               m_nParticleProperties,
-              m_nChunks,
-              m_chunkLength);
+              nChunks,
+              chunkLength);
+
+#ifndef NDEBUG
+        _safeGuardCounter = 0;
+#endif
+
     }
 
-    void finalize()
+
+    void _checkSystemSize()
     {
-        m_file.close();
+        if (m_systemSizeX_start >= m_systemSizeX ||
+            m_systemSizeY_start >= m_systemSizeY ||
+            m_systemSizeZ_start >= m_systemSizeZ)
+        {
+            throw std::runtime_error("Inconsistent system sizes.");
+        }
+    }
+
+    void _checkIfFileOpen()
+    {
+        if (m_file.is_open())
+        {
+            throw std::runtime_error("lammps file is already open. (Forgot to call finalize()?)");
+        }
+    }
+
+    void _checkIfFileClosed()
+    {
+        if (!m_file.is_open())
+        {
+            throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
+        }
+    }
+
+    void _checkParticlePropertySize()
+    {
+        const uint nParticlePropertiesSaved = _safeGuardCounter/m_nParticles;
+        const double _check = _safeGuardCounter/(double)m_nParticles;
+
+        if (nParticlePropertiesSaved != _check)
+        {
+            throw std::runtime_error("Uneven number of particle properties saved.");
+        }
+
+        if (nParticlePropertiesSaved != m_nParticleProperties)
+        {
+            throw std::runtime_error("Saved number of particle properties does not match the specified number");
+        }
     }
 
 };
 
+uint lammpswriter::_safeGuardCounter = 0;
 
 double lammpswriter::m_systemSizeX_start;
 double lammpswriter::m_systemSizeY_start;
@@ -166,6 +248,3 @@ uint lammpswriter::m_nParticleProperties;
 
 string lammpswriter::m_prefix = "lammpsfile";
 string lammpswriter::m_path = "";
-
-const uint lammpswriter::m_nChunks = 1;
-uint lammpswriter::m_chunkLength;
