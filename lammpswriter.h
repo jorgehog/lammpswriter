@@ -96,7 +96,7 @@ public:
 
     static void setFilePath(const string path)
     {
-        m_path = path;
+        m_path = path + "/";
     }
 
 
@@ -149,7 +149,7 @@ private:
     void initializeFile()
     {
         std::stringstream s;
-        s << m_path << "/" << m_prefix << m_frameNumber << ".lmp";
+        s << m_path << m_prefix << m_frameNumber << ".lmp";
 
         m_file.open(s.str().c_str());
     }
