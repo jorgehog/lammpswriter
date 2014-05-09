@@ -1,9 +1,13 @@
 #include <iostream>
 #include <sys/types.h>
 #include <armadillo>
+#include <mpi.h>
 
 //Defining NDEBUG removes all checks (see list in the main function).
 //#define NDEBUG
+
+//Defining USE_MPI enabled MPI support (_n, where n = rank, appended to file name)
+//#define USE_MPI
 
 #include "lammpswriter/lammpswriter.h"
 
@@ -24,6 +28,15 @@ int main()
      *
      */
 
+    int rank;
+    int nProcs;
+
+    MPI_Init(NULL, NULL);
+
+    MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    lammpswriter::setMPIRank(rank, 0);
 
     //Set the system size once and for all.
     lammpswriter::setSystemSize(1, 1, 1);
@@ -34,9 +47,9 @@ int main()
     //Set a path to save the files. Defaults to current working directory.
     lammpswriter::setFilePath("/tmp");
 
-    //Set the name of the files (particlePositions0.lmp ...).
+    //Set the name of the files (particleProperties0.lmp ...).
     //Defaults to 'lammpsfile'
-    lammpswriter::setFileNamePrefix("particlePositions");
+    lammpswriter::setFileNamePrefix("particleProperties");
 
 
     uint nParticles = 10;
@@ -66,13 +79,13 @@ int main()
         for (uint i = 0; i < nParticles; ++i)
         {
             //Store the data we specified.
-            writer.write(type[i%2],
-                         pos(i, 0),
-                         pos(i, 1),
-                         pos(i, 2),
-                         vel(i, 0),
-                         vel(i, 1),
-                         vel(i, 2));
+            writer << type[i%2]
+                   << pos(i, 0)
+                   << pos(i, 1)
+                   << pos(i, 2)
+                   << vel(i, 0)
+                   << vel(i, 1)
+                   << vel(i, 2);
         }
 
         //closes the file.
@@ -88,6 +101,8 @@ int main()
         dumpLammps(c, nParticles, pos, vel, type);
     }
 
+    MPI_Finalize();
+
     return 0;
 }
 
@@ -98,12 +113,12 @@ void dumpLammps(const uint frameNumber, const uint nParticles, const mat &pos, c
 
     for (uint i = 0; i < nParticles; ++i)
     {
-        writer.write(type[i%2],
-                     pos(i, 0),
-                     pos(i, 1),
-                     pos(i, 2),
-                     vel(i, 0),
-                     vel(i, 1),
-                     vel(i, 2));
+        writer << type[i%2]
+               << pos(i, 0)
+               << pos(i, 1)
+               << pos(i, 2)
+               << vel(i, 0)
+               << vel(i, 1)
+               << vel(i, 2);
     }
 }

@@ -4,8 +4,14 @@
 #include <sstream>
 #include <exception>
 
+#ifdef USE_MPI
+#include <mpi.h>
+#endif
+
 using std::ofstream;
 using std::string;
+using std::cout;
+using std::endl;
 
 class lammpswriter
 {
@@ -24,6 +30,7 @@ public:
         initializeFile();
 
         dumpHeader();
+
     }
 
     ~lammpswriter()
@@ -52,6 +59,7 @@ public:
 #ifndef NDEBUG
         _checkParticlePropertySize();
 #endif
+        _safeGuardCounter = 0;
         m_file.close();
 
     }
@@ -99,6 +107,13 @@ public:
         m_path = path + "/";
     }
 
+    static void setMPIRank(const int rank, const int masterRank)
+    {
+        m_MPIRank = rank;
+
+        m_isMPIMaster = (rank == masterRank);
+    }
+
 
     template<typename T, typename ...Args>
     void write(const T &val, const Args&... args)
@@ -114,9 +129,16 @@ public:
         _checkIfFileClosed();
         _safeGuardCounter++;
 #endif
-
         m_file.write(reinterpret_cast<const char*>(&val), sizeof(val));
     }
+
+    template<typename T>
+    lammpswriter &operator << (const T &val)
+    {
+        write(static_cast<double>(val));
+        return *this;
+    }
+
 
 private:
 
@@ -139,6 +161,10 @@ private:
     static string m_prefix;
     static string m_path;
 
+    static int m_MPIRank;
+
+    static bool m_isMPIMaster;
+
     ofstream m_file;
 
     uint m_nParticles;
@@ -149,13 +175,25 @@ private:
     void initializeFile()
     {
         std::stringstream s;
-        s << m_path << m_prefix << m_frameNumber << ".lmp";
+
+        s << m_path << m_prefix << m_frameNumber;
+
+#ifdef USE_MPI
+        s << "_" << m_MPIRank;
+#endif
+        s  << ".lmp";
 
         m_file.open(s.str().c_str());
+
     }
 
     void dumpHeader()
     {
+
+        if (!m_isMPIMaster)
+        {
+            return;
+        }
 
 #ifndef NDEBUG
         _checkSystemSize();
@@ -179,18 +217,15 @@ private:
               nChunks,
               chunkLength);
 
-#ifndef NDEBUG
         _safeGuardCounter = 0;
-#endif
-
     }
 
 
     void _checkSystemSize()
     {
         if (m_systemSizeX_start >= m_systemSizeX ||
-            m_systemSizeY_start >= m_systemSizeY ||
-            m_systemSizeZ_start >= m_systemSizeZ)
+                m_systemSizeY_start >= m_systemSizeY ||
+                m_systemSizeZ_start >= m_systemSizeZ)
         {
             throw std::runtime_error("Inconsistent system sizes.");
         }
@@ -214,6 +249,11 @@ private:
 
     void _checkParticlePropertySize()
     {
+        if (_safeGuardCounter == 0)
+        {
+            return;
+        }
+
         const uint nParticlePropertiesSaved = _safeGuardCounter/m_nParticles;
         const double _check = _safeGuardCounter/(double)m_nParticles;
 
@@ -248,3 +288,6 @@ uint lammpswriter::m_nParticleProperties;
 
 string lammpswriter::m_prefix = "lammpsfile";
 string lammpswriter::m_path = "";
+
+int lammpswriter::m_MPIRank;
+bool lammpswriter::m_isMPIMaster = true;
