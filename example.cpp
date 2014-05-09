@@ -6,8 +6,8 @@
 //Defining NDEBUG removes all checks (see list in the main function).
 //#define NDEBUG
 
-//Defining USE_MPI enabled MPI support (_n, where n = rank, appended to file name)
-//#define USE_MPI
+//Defining LAMMPSWRITER_USE_MPI enabled MPI support (_n, where n = rank, appended to file name)
+#define LAMMPSWRITER_USE_MPI
 
 #include "lammpswriter/lammpswriter.h"
 
@@ -28,6 +28,7 @@ int main()
      *
      */
 
+#ifdef LAMMPSWRITER_USE_MPI
     int rank;
     int nProcs;
 
@@ -36,7 +37,9 @@ int main()
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    //Set the MPI rank and the master rank
     lammpswriter::setMPIRank(rank, 0);
+#endif
 
     //Set the system size once and for all.
     lammpswriter::setSystemSize(1, 1, 1);
