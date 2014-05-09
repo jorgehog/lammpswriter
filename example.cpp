@@ -15,7 +15,14 @@ using namespace arma;
 using namespace std;
 
 
-void dumpLammps(const uint frameNumber, const uint nParticles, const mat &pos, const mat &vel, const vec &type);
+void dumpLammps(const uint frameNumber,
+                const uint nParticles,
+                const uint nParticleProperties,
+                const string path,
+                const string name,
+                const mat &pos,
+                const mat &vel,
+                const vec &type);
 
 int main()
 {
@@ -44,18 +51,8 @@ int main()
 #endif
 
     //Set the system size once and for all.
+    //Can also set a start position and shear.
     lammpswriter::setSystemSize(1, 1, 1);
-
-    //Set the number of properties to store for each particle.
-    lammpswriter::setNumberOfParticleProperties(7);
-
-    //Set a path to save the files. Defaults to current working directory.
-    lammpswriter::setFilePath("/tmp");
-
-    //Set the name of the files (particleProperties0.lmp ...).
-    //Defaults to 'lammpsfile'
-    lammpswriter::setFileNamePrefix("particleProperties");
-
 
     uint nParticles = 10;
     nParticles += rank;
@@ -66,8 +63,14 @@ int main()
     vec type = {1.0, 2.0};
 
 
+    uint nParticleProperties = 7;
+
+    string path = "/tmp";
+    string name = "particleData";
+
+
     //Create an object for writing (used only for alternative one)
-    lammpswriter writer;
+    lammpswriter writer(nParticleProperties, path, name);
 
 
     uint nCycles = 10;
@@ -113,7 +116,14 @@ int main()
         pos.randu();
         vel.randn();
 
-        dumpLammps(c, nParticles, pos, vel, type);
+        dumpLammps(c,
+                   nParticles,
+                   nParticleProperties,
+                   path,
+                   name,
+                   pos,
+                   vel,
+                   type);
     }
 
     if (rank == 0)
@@ -129,10 +139,18 @@ int main()
     return 0;
 }
 
-void dumpLammps(const uint frameNumber, const uint nParticles, const mat &pos, const mat &vel, const vec &type)
+
+void dumpLammps(const uint frameNumber,
+                const uint nParticles,
+                const uint nParticleProperties,
+                const string path,
+                const string name,
+                const mat &pos,
+                const mat &vel,
+                const vec &type)
 {
     //Create an object for writing. The destructor will close the file.
-    lammpswriter writer(frameNumber, nParticles);
+    lammpswriter writer(nParticleProperties, frameNumber, nParticles, path, name);
 
     for (uint i = 0; i < nParticles; ++i)
     {

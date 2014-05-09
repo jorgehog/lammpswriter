@@ -21,12 +21,26 @@ class lammpswriter
 
 public:
 
-    lammpswriter()
+    lammpswriter(const uint nParticleProperties,
+                 const string path = "",
+                 const string prefix = "lammpsfile"):
+        m_valueCounter(0),
+        m_nParticleProperties(nParticleProperties),
+        m_path(path.empty() ? path : path + "/"),
+        m_prefix(prefix)
     {
 
     }
 
-    lammpswriter(const uint frameNumber, const uint nParticles) :
+    lammpswriter(const uint nParticleProperties,
+                 const uint frameNumber,
+                 const uint nParticles,
+                 const string path = "",
+                 const string prefix = "lammpsfile") :
+        m_valueCounter(0),
+        m_nParticleProperties(nParticleProperties),
+        m_path(path.empty() ? path : path + "/"),
+        m_prefix(prefix),
         m_nParticles(nParticles),
         m_frameNumber(frameNumber)
     {
@@ -95,23 +109,6 @@ public:
         m_zShear = zShear;
     }
 
-
-    static void setNumberOfParticleProperties(const uint nParticleProperties)
-    {
-        m_nParticleProperties = nParticleProperties;
-    }
-
-
-    static void setFileNamePrefix(const string prefix)
-    {
-        m_prefix = prefix;
-    }
-
-    static void setFilePath(const string path)
-    {
-        m_path = path + "/";
-    }
-
     static void setMPIRank(const int rank, const int nNodes, const int masterRank = 0)
     {
         m_MPI_master = masterRank;
@@ -122,7 +119,7 @@ public:
 
         if (m_isMPIMaster)
         {
-            m_nParticles_list.resize(nNodes);
+            m_nParticlesList.resize(nNodes);
         }
     }
 
@@ -152,7 +149,6 @@ public:
 
 private:
 
-    static uint m_valueCounter;
 
     static double m_systemSizeX_start;
     static double m_systemSizeY_start;
@@ -166,32 +162,28 @@ private:
     static double m_yShear;
     static double m_zShear;
 
-    static uint m_nParticleProperties;
-
-    static string m_prefix;
-    static string m_path;
-
     static int m_MPI_master;
-
     static bool m_isMPIMaster;
-
-    static vector<int> m_nParticles_list;
-
     static int m_MPI_nNodes;
+    static vector<int> m_nParticlesList;
 
-    static uint m_totalParticles;
 
+    uint m_valueCounter;
+
+    uint m_nParticleProperties;
+
+    string m_path;
+    string m_prefix;
+
+    vector<double> m_myValues;
     vector<double> m_allValues;
-
 
     ofstream m_file;
 
-    vector<double> m_myValues;
-
     uint m_nParticles;
+    uint m_totalParticles;
 
     uint m_frameNumber;
-
 
 
 
@@ -302,11 +294,11 @@ private:
     {
 #ifdef LAMMPSWRITER_USE_MPI
 
-        MPI_Gather(&m_nParticles, 1, MPI_INT, &m_nParticles_list.front(), 1, MPI_INT, m_MPI_master, MPI_COMM_WORLD);
+        MPI_Gather(&m_nParticles, 1, MPI_INT, &m_nParticlesList.front(), 1, MPI_INT, m_MPI_master, MPI_COMM_WORLD);
 
         if (m_isMPIMaster)
         {
-            m_totalParticles = std::accumulate(m_nParticles_list.begin(), m_nParticles_list.end(), 0);
+            m_totalParticles = std::accumulate(m_nParticlesList.begin(), m_nParticlesList.end(), 0);
         }
 
 #else
@@ -334,7 +326,7 @@ private:
                 {
                     displacements[i] = currentDisplacement;
 
-                    recvCounts[i] = m_nParticles_list[i]*m_nParticleProperties;
+                    recvCounts[i] = m_nParticlesList[i]*m_nParticleProperties;
 
                     currentDisplacement += recvCounts[i];
                 }
@@ -375,8 +367,6 @@ private:
 
 };
 
-uint lammpswriter::m_valueCounter = 0;
-
 double lammpswriter::m_systemSizeX_start;
 double lammpswriter::m_systemSizeY_start;
 double lammpswriter::m_systemSizeZ_start;
@@ -389,15 +379,7 @@ double lammpswriter::m_xShear = 0;
 double lammpswriter::m_yShear = 0;
 double lammpswriter::m_zShear = 0;
 
-uint lammpswriter::m_nParticleProperties;
-
-string lammpswriter::m_prefix = "lammpsfile";
-string lammpswriter::m_path = "";
-
 int  lammpswriter::m_MPI_master = 0;
 bool lammpswriter::m_isMPIMaster = true;
 int  lammpswriter::m_MPI_nNodes;
-
-vector<int>    lammpswriter::m_nParticles_list;
-
-uint lammpswriter::m_totalParticles;
+vector<int>    lammpswriter::m_nParticlesList;
