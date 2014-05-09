@@ -4,7 +4,7 @@
 #include <sstream>
 #include <exception>
 
-#ifdef USE_MPI
+#ifdef LAMMPSWRITER_USE_MPI
 #include <mpi.h>
 #endif
 
@@ -178,7 +178,7 @@ private:
 
         s << m_path << m_prefix << m_frameNumber;
 
-#ifdef USE_MPI
+#ifdef LAMMPSWRITER_USE_MPI
         s << "_" << m_MPIRank;
 #endif
         s  << ".lmp";
