@@ -3,6 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <exception>
+#include <vector>
+#include <numeric>
 
 #ifdef LAMMPSWRITER_USE_MPI
 #include <mpi.h>
@@ -12,6 +14,7 @@ using std::ofstream;
 using std::string;
 using std::cout;
 using std::endl;
+using std::vector;
 
 class lammpswriter
 {
@@ -27,15 +30,19 @@ public:
         m_nParticles(nParticles),
         m_frameNumber(frameNumber)
     {
-        initializeFile();
+        _initialize();
 
-        dumpHeader();
+        _dumpHeader();
 
     }
 
     ~lammpswriter()
     {
-        finalize();
+        _checkIfFileOpen();
+
+        m_myValues.clear();
+        m_allValues.clear();
+
     }
 
     void initializeNewFile(const uint frameNumber, const uint nParticles)
@@ -44,23 +51,21 @@ public:
 
         m_nParticles = nParticles;
 
-#ifndef NDEBUG
         _checkIfFileOpen();
-#endif
 
-        initializeFile();
+        _initialize();
 
-        dumpHeader();
+        _dumpHeader();
     }
 
     void finalize()
     {
 
-#ifndef NDEBUG
         _checkParticlePropertySize();
-#endif
-        _safeGuardCounter = 0;
-        m_file.close();
+
+        _dumpFile();
+
+        m_valueCounter = 0;
 
     }
 
@@ -107,11 +112,18 @@ public:
         m_path = path + "/";
     }
 
-    static void setMPIRank(const int rank, const int masterRank)
+    static void setMPIRank(const int rank, const int nNodes, const int masterRank = 0)
     {
-        m_MPIRank = rank;
+        m_MPI_master = masterRank;
+
+        m_MPI_nNodes = nNodes;
 
         m_isMPIMaster = (rank == masterRank);
+
+        if (m_isMPIMaster)
+        {
+            m_nParticles_list.resize(nNodes);
+        }
     }
 
 
@@ -125,24 +137,22 @@ public:
     template<typename T>
     void write(const T &val)
     {
-#ifndef NDEBUG
         _checkIfFileClosed();
-        _safeGuardCounter++;
-#endif
+
         m_file.write(reinterpret_cast<const char*>(&val), sizeof(val));
     }
 
     template<typename T>
     lammpswriter &operator << (const T &val)
     {
-        write(static_cast<double>(val));
+        m_myValues[m_valueCounter++] = static_cast<double>(val);
         return *this;
     }
 
 
 private:
 
-    static uint _safeGuardCounter;
+    static uint m_valueCounter;
 
     static double m_systemSizeX_start;
     static double m_systemSizeY_start;
@@ -161,49 +171,65 @@ private:
     static string m_prefix;
     static string m_path;
 
-    static int m_MPIRank;
+    static int m_MPI_master;
 
     static bool m_isMPIMaster;
 
+    static vector<int> m_nParticles_list;
+
+    static int m_MPI_nNodes;
+
+    static uint m_totalParticles;
+
+    vector<double> m_allValues;
+
+
     ofstream m_file;
+
+    vector<double> m_myValues;
 
     uint m_nParticles;
 
     uint m_frameNumber;
 
 
-    void initializeFile()
+
+
+    void _initialize()
     {
-        std::stringstream s;
 
-        s << m_path << m_prefix << m_frameNumber;
-
-#ifdef LAMMPSWRITER_USE_MPI
-        s << "_" << m_MPIRank;
-#endif
-        s  << ".lmp";
-
-        m_file.open(s.str().c_str());
-
-    }
-
-    void dumpHeader()
-    {
+        m_myValues.resize(m_nParticles*m_nParticleProperties);
 
         if (!m_isMPIMaster)
         {
             return;
         }
 
-#ifndef NDEBUG
-        _checkSystemSize();
-#endif
+        std::stringstream s;
 
-        const uint chunkLength = m_nParticles*m_nParticleProperties;
+        s << m_path << m_prefix << m_frameNumber << ".lmp";
+
+        m_file.open(s.str().c_str());
+
+    }
+
+    void _dumpHeader()
+    {
+
+        _getTotalNumberOfParticles();
+
+        if (!m_isMPIMaster)
+        {
+            return;
+        }
+
+        _checkSystemSize();
+
+        const uint chunkLength = m_totalParticles*m_nParticleProperties;
         const uint nChunks = 1;
 
         write(m_frameNumber,
-              m_nParticles,
+              m_totalParticles,
               m_systemSizeX_start,
               m_systemSizeX,
               m_systemSizeY_start,
@@ -216,8 +242,6 @@ private:
               m_nParticleProperties,
               nChunks,
               chunkLength);
-
-        _safeGuardCounter = 0;
     }
 
 
@@ -233,29 +257,34 @@ private:
 
     void _checkIfFileOpen()
     {
+#ifndef NDEBUG
         if (m_file.is_open())
         {
             throw std::runtime_error("lammps file is already open. (Forgot to call finalize()?)");
         }
+#endif
     }
 
     void _checkIfFileClosed()
     {
+#ifndef NDEBUG
         if (!m_file.is_open())
         {
             throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
         }
+#endif
     }
 
     void _checkParticlePropertySize()
     {
-        if (_safeGuardCounter == 0)
+#ifndef NDEBUG
+        if (m_valueCounter == 0)
         {
             return;
         }
 
-        const uint nParticlePropertiesSaved = _safeGuardCounter/m_nParticles;
-        const double _check = _safeGuardCounter/(double)m_nParticles;
+        const uint nParticlePropertiesSaved = m_valueCounter/m_nParticles;
+        const double _check = m_valueCounter/(double)m_nParticles;
 
         if (nParticlePropertiesSaved != _check)
         {
@@ -266,11 +295,87 @@ private:
         {
             throw std::runtime_error("Saved number of particle properties does not match the specified number");
         }
+#endif
+    }
+
+    void _getTotalNumberOfParticles()
+    {
+#ifdef LAMMPSWRITER_USE_MPI
+
+        MPI_Gather(&m_nParticles, 1, MPI_INT, &m_nParticles_list.front(), 1, MPI_INT, m_MPI_master, MPI_COMM_WORLD);
+
+        if (m_isMPIMaster)
+        {
+            m_totalParticles = std::accumulate(m_nParticles_list.begin(), m_nParticles_list.end(), 0);
+        }
+
+#else
+        m_totalParticles = m_nParticles;
+#endif
+    }
+
+    void _dumpFile()
+    {
+#ifdef LAMMPSWRITER_USE_MPI
+        if (m_MPI_nNodes != 1)
+        {
+
+            int *displacements = NULL;
+            int *recvCounts = NULL;
+
+            if (m_isMPIMaster)
+            {
+
+                displacements = new int[m_MPI_nNodes];
+                recvCounts = new int[m_MPI_nNodes];
+
+                int currentDisplacement = 0;
+                for (int i = 0; i < m_MPI_nNodes; ++i)
+                {
+                    displacements[i] = currentDisplacement;
+
+                    recvCounts[i] = m_nParticles_list[i]*m_nParticleProperties;
+
+                    currentDisplacement += recvCounts[i];
+                }
+
+                m_allValues.resize(m_totalParticles*m_nParticleProperties);
+
+            }
+
+            MPI_Gatherv(&m_myValues.front(),
+                        m_myValues.size(),
+                        MPI_DOUBLE,
+                        &m_allValues.front(),
+                        recvCounts,
+                        displacements,
+                        MPI_DOUBLE,
+                        m_MPI_master,
+                        MPI_COMM_WORLD);
+
+
+            if (m_isMPIMaster)
+            {
+                m_file.write(reinterpret_cast<const char*>(&m_allValues.front()), m_totalParticles*m_nParticleProperties*sizeof(double));
+                delete [] recvCounts;
+                delete [] displacements;
+            }
+        }
+
+        else
+        {
+            m_file.write(reinterpret_cast<const char*>(&m_myValues.front()), m_nParticles*m_nParticleProperties*sizeof(double));
+        }
+
+#else
+        m_file.write(reinterpret_cast<const char*>(&m_myValues.front()), m_nParticles*m_nParticleProperties*sizeof(double));
+#endif
+        m_file.close();
     }
 
 };
 
-uint lammpswriter::_safeGuardCounter = 0;
+uint lammpswriter::m_valueCounter = 0;
 
 double lammpswriter::m_systemSizeX_start;
 double lammpswriter::m_systemSizeY_start;
@@ -289,5 +394,10 @@ uint lammpswriter::m_nParticleProperties;
 string lammpswriter::m_prefix = "lammpsfile";
 string lammpswriter::m_path = "";
 
-int lammpswriter::m_MPIRank;
+int  lammpswriter::m_MPI_master = 0;
 bool lammpswriter::m_isMPIMaster = true;
+int  lammpswriter::m_MPI_nNodes;
+
+vector<int>    lammpswriter::m_nParticles_list;
+
+uint lammpswriter::m_totalParticles;

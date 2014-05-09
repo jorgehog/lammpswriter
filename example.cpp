@@ -7,7 +7,7 @@
 //#define NDEBUG
 
 //Defining LAMMPSWRITER_USE_MPI enabled MPI support (_n, where n = rank, appended to file name)
-#define LAMMPSWRITER_USE_MPI
+//#define LAMMPSWRITER_USE_MPI
 
 #include "lammpswriter/lammpswriter.h"
 
@@ -28,8 +28,8 @@ int main()
      *
      */
 
+    int rank = 0;
 #ifdef LAMMPSWRITER_USE_MPI
-    int rank;
     int nProcs;
 
     MPI_Init(NULL, NULL);
@@ -37,8 +37,10 @@ int main()
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    srand(21321321 + rank); //Set a unique seed per process
+
     //Set the MPI rank and the master rank
-    lammpswriter::setMPIRank(rank, 0);
+    lammpswriter::setMPIRank(rank, nProcs);
 #endif
 
     //Set the system size once and for all.
@@ -56,6 +58,7 @@ int main()
 
 
     uint nParticles = 10;
+    nParticles += rank;
 
     //We store positions, velocities, and a type
     mat pos(nParticles, 3);
@@ -68,6 +71,9 @@ int main()
 
 
     uint nCycles = 10;
+
+    wall_clock timer;
+    timer.tic();
 
     //First alternative usage
     for (uint c = 0; c < nCycles; ++c)
@@ -95,6 +101,12 @@ int main()
         writer.finalize();
     }
 
+    if (rank == 0)
+    {
+        cout << "dump took " << timer.toc() << "seconds." << endl;
+        timer.tic();
+    }
+
     //Second alternative usage
     for (uint c = nCycles; c < 2*nCycles; ++c)
     {
@@ -104,7 +116,15 @@ int main()
         dumpLammps(c, nParticles, pos, vel, type);
     }
 
+    if (rank == 0)
+    {
+        cout << "dump took " << timer.toc() << "seconds." << endl;
+        timer.tic();
+    }
+
+#ifdef LAMMPSWRITER_USE_MPI
     MPI_Finalize();
+#endif
 
     return 0;
 }
@@ -124,4 +144,7 @@ void dumpLammps(const uint frameNumber, const uint nParticles, const mat &pos, c
                << vel(i, 1)
                << vel(i, 2);
     }
+
+    writer.finalize();
+
 }
