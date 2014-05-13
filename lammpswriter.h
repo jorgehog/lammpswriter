@@ -115,12 +115,15 @@ public:
 
         m_MPI_nNodes = nNodes;
 
+        _checkMPI();
+
         m_isMPIMaster = (rank == masterRank);
 
         if (m_isMPIMaster)
         {
             m_nParticlesList.resize(nNodes);
         }
+
     }
 
 
@@ -290,6 +293,18 @@ private:
 #endif
     }
 
+    static void _checkMPI()
+    {
+#ifndef NDEBUG
+#ifdef LAMMPSWRITER_LOW_MEMORY
+        if (m_MPI_master != 0)
+        {
+            throw std::runtime_error("For low mem mpi to work, master rank must be rank zero.");
+        }
+#endif
+#endif
+    }
+
     void _getTotalNumberOfParticles()
     {
 #ifdef LAMMPSWRITER_USE_MPI
@@ -330,11 +345,12 @@ private:
 
                     currentDisplacement += recvCounts[i];
                 }
-
+#ifndef LAMMPSWRITER_LOW_MEMORY
                 m_allValues.resize(m_totalParticles*m_nParticleProperties);
-
+#endif
             }
 
+#ifndef LAMMPSWRITER_LOW_MEMORY
             MPI_Gatherv(&m_myValues.front(),
                         m_myValues.size(),
                         MPI_DOUBLE,
@@ -344,11 +360,34 @@ private:
                         MPI_DOUBLE,
                         m_MPI_master,
                         MPI_COMM_WORLD);
+#else
+            if (m_isMPIMaster)
+            {
+                _simpleDump();
+
+                for (uint node = 1; node < m_MPI_nNodes; node++)
+                {
+                    m_myValues.resize(recvCounts[node]);
+                    MPI_Recv(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, node, 0, MPI_COMM_WORLD, NULL);
+
+                    m_nParticles = m_nParticlesList[node];
+                    _simpleDump();
+                }
+            }
+
+            else
+            {
+                MPI_Send(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+            }
+#endif
 
 
             if (m_isMPIMaster)
             {
+#ifndef LAMMPSWRITER_LOW_MEMORY
                 m_file.write(reinterpret_cast<const char*>(&m_allValues.front()), m_totalParticles*m_nParticleProperties*sizeof(double));
+#endif
+
                 delete [] recvCounts;
                 delete [] displacements;
             }
@@ -356,13 +395,18 @@ private:
 
         else
         {
-            m_file.write(reinterpret_cast<const char*>(&m_myValues.front()), m_nParticles*m_nParticleProperties*sizeof(double));
+            _simpleDump();
         }
 
 #else
-        m_file.write(reinterpret_cast<const char*>(&m_myValues.front()), m_nParticles*m_nParticleProperties*sizeof(double));
+        _simpleDump();
 #endif
         m_file.close();
+    }
+
+    void _simpleDump()
+    {
+        m_file.write(reinterpret_cast<const char*>(&m_myValues.front()), m_nParticles*m_nParticleProperties*sizeof(double));
     }
 
 };

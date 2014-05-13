@@ -9,6 +9,10 @@
 //Defining LAMMPSWRITER_USE_MPI enabled MPI support (_n, where n = rank, appended to file name)
 //#define LAMMPSWRITER_USE_MPI
 
+//Defining LAMMSWRITER_LOW_MEMORY enabled such that multiple data sets never gets stored simultaneously on a single node.
+//This yields a slower file dump, but ensures stable and pain free file dump regardless of memory available and number of nodes active.
+//#define LAMMPSWRITER_LOW_MEMORY
+
 #include "lammpswriter/lammpswriter.h"
 
 using namespace arma;
