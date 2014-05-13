@@ -54,9 +54,6 @@ int main()
     lammpswriter::setMPIRank(rank, nProcs);
 #endif
 
-    //Set the system size once and for all.
-    //Can also set a start position and shear.
-    lammpswriter::setSystemSize(1, 1, 1);
 
     uint nParticles = 10;
     nParticles += rank;
@@ -76,6 +73,8 @@ int main()
     //Create an object for writing (used only for alternative one)
     lammpswriter writer(nParticleProperties, path, name);
 
+    //Set the system size. Can also set a start position and shear.
+    writer.setSystemSize(1, 1, 1);
 
     uint nCycles = 10;
 
@@ -154,7 +153,10 @@ void dumpLammps(const uint frameNumber,
                 const vec &type)
 {
     //Create an object for writing. The destructor will close the file.
-    lammpswriter writer(nParticleProperties, frameNumber, nParticles, path, name);
+    lammpswriter writer(nParticleProperties, path, name);
+
+    writer.setSystemSize(1, 1, 1);
+    writer.initializeNewFile(frameNumber, nParticles);
 
     for (uint i = 0; i < nParticles; ++i)
     {

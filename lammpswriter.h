@@ -24,6 +24,18 @@ public:
     lammpswriter(const uint nParticleProperties,
                  const string path = "",
                  const string prefix = "lammpsfile"):
+        m_systemSizeX_start(0),
+        m_systemSizeY_start(0),
+        m_systemSizeZ_start(0),
+
+        m_systemSizeX(0),
+        m_systemSizeY(0),
+        m_systemSizeZ(0),
+
+        m_xShear(0),
+        m_yShear(0),
+        m_zShear(0),
+
         m_valueCounter(0),
         m_nParticleProperties(nParticleProperties),
         m_path(path.empty() ? path : path + "/"),
@@ -32,23 +44,6 @@ public:
 
     }
 
-    lammpswriter(const uint nParticleProperties,
-                 const uint frameNumber,
-                 const uint nParticles,
-                 const string path = "",
-                 const string prefix = "lammpsfile") :
-        m_valueCounter(0),
-        m_nParticleProperties(nParticleProperties),
-        m_path(path.empty() ? path : path + "/"),
-        m_prefix(prefix),
-        m_nParticles(nParticles),
-        m_frameNumber(frameNumber)
-    {
-        _initialize();
-
-        _dumpHeader();
-
-    }
 
     ~lammpswriter()
     {
@@ -69,7 +64,6 @@ public:
 
         _initialize();
 
-        _dumpHeader();
     }
 
     void finalize()
@@ -83,12 +77,12 @@ public:
 
     }
 
-    static void setSystemSize(const double systemSizeX,
-                              const double systemSizeY,
-                              const double systemSizeZ,
-                              const double systemSizeX_start = 0,
-                              const double systemSizeY_start = 0,
-                              const double systemSizeZ_start = 0)
+    void setSystemSize(const double systemSizeX,
+                       const double systemSizeY,
+                       const double systemSizeZ,
+                       const double systemSizeX_start = 0,
+                       const double systemSizeY_start = 0,
+                       const double systemSizeZ_start = 0)
     {
         m_systemSizeX = systemSizeX;
         m_systemSizeY = systemSizeY;
@@ -100,9 +94,9 @@ public:
     }
 
 
-    static void setShear(const double xShear = 0,
-                         const double yShear = 0,
-                         const double zShear = 0)
+    void setShear(const double xShear = 0,
+                  const double yShear = 0,
+                  const double zShear = 0)
     {
         m_xShear = xShear;
         m_yShear = yShear;
@@ -153,17 +147,17 @@ public:
 private:
 
 
-    static double m_systemSizeX_start;
-    static double m_systemSizeY_start;
-    static double m_systemSizeZ_start;
+    double m_systemSizeX_start;
+    double m_systemSizeY_start;
+    double m_systemSizeZ_start;
 
-    static double m_systemSizeX;
-    static double m_systemSizeY;
-    static double m_systemSizeZ;
+    double m_systemSizeX;
+    double m_systemSizeY;
+    double m_systemSizeZ;
 
-    static double m_xShear;
-    static double m_yShear;
-    static double m_zShear;
+    double m_xShear;
+    double m_yShear;
+    double m_zShear;
 
     static int m_MPI_master;
     static bool m_isMPIMaster;
@@ -205,6 +199,8 @@ private:
         s << m_path << m_prefix << m_frameNumber << ".lmp";
 
         m_file.open(s.str().c_str());
+
+        _dumpHeader();
 
     }
 
@@ -410,18 +406,6 @@ private:
     }
 
 };
-
-double lammpswriter::m_systemSizeX_start;
-double lammpswriter::m_systemSizeY_start;
-double lammpswriter::m_systemSizeZ_start;
-
-double lammpswriter::m_systemSizeX;
-double lammpswriter::m_systemSizeY;
-double lammpswriter::m_systemSizeZ;
-
-double lammpswriter::m_xShear = 0;
-double lammpswriter::m_yShear = 0;
-double lammpswriter::m_zShear = 0;
 
 int  lammpswriter::m_MPI_master = 0;
 bool lammpswriter::m_isMPIMaster = true;
