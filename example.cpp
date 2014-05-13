@@ -18,16 +18,6 @@
 using namespace arma;
 using namespace std;
 
-
-void dumpLammps(const uint frameNumber,
-                const uint nParticles,
-                const uint nParticleProperties,
-                const string path,
-                const string name,
-                const mat &pos,
-                const mat &vel,
-                const vec &type);
-
 int main()
 {
     /*
@@ -55,7 +45,7 @@ int main()
 #endif
 
 
-    uint nParticles = 10;
+    uint nParticles = 10000;
     nParticles += rank;
 
     //We store positions, velocities, and a type
@@ -74,20 +64,25 @@ int main()
     lammpswriter writer(nParticleProperties, name, path);
 
     //Set the system size. Can also set a start position and shear.
-    writer.setSystemSize(1, 1, 1);
+    uvec boxSize = {100, 150, 200};
+    writer.setSystemSize(boxSize(0), boxSize(1), boxSize(2));
 
-    uint nCycles = 10;
+    uint nCycles = 1000;
 
     wall_clock timer;
-    timer.tic();
+    double t = 0;
 
-    //First alternative usage
     for (uint c = 0; c < nCycles; ++c)
     {
 
         pos.randu();
         vel.randn();
 
+        pos.col(0) *= boxSize(0);
+        pos.col(1) *= boxSize(1);
+        pos.col(2) *= boxSize(2);
+
+        timer.tic();
         //for sequential usage, we initialize a new file specifying.
         writer.initializeNewFile(c, nParticles);
 
@@ -105,70 +100,19 @@ int main()
 
         //closes the file.
         writer.finalize();
+
+        t += timer.toc();
     }
 
     if (rank == 0)
     {
-        cout << "dump took " << timer.toc() << "seconds." << endl;
-        timer.tic();
+        cout << "dump took " << t/nCycles*1000 << " ms per cycle." << endl;
     }
 
-    //Second alternative usage
-    for (uint c = nCycles; c < 2*nCycles; ++c)
-    {
-        pos.randu();
-        vel.randn();
-
-        dumpLammps(c,
-                   nParticles,
-                   nParticleProperties,
-                   path,
-                   name,
-                   pos,
-                   vel,
-                   type);
-    }
-
-    if (rank == 0)
-    {
-        cout << "dump took " << timer.toc() << "seconds." << endl;
-        timer.tic();
-    }
 
 #ifdef LAMMPSWRITER_USE_MPI
     MPI_Finalize();
 #endif
 
     return 0;
-}
-
-
-void dumpLammps(const uint frameNumber,
-                const uint nParticles,
-                const uint nParticleProperties,
-                const string path,
-                const string name,
-                const mat &pos,
-                const mat &vel,
-                const vec &type)
-{
-    //Create an object for writing. The destructor will close the file.
-    lammpswriter writer(nParticleProperties, name, path);
-
-    writer.setSystemSize(1, 1, 1);
-    writer.initializeNewFile(frameNumber, nParticles);
-
-    for (uint i = 0; i < nParticles; ++i)
-    {
-        writer << type[i%2]
-               << pos(i, 0)
-               << pos(i, 1)
-               << pos(i, 2)
-               << vel(i, 0)
-               << vel(i, 1)
-               << vel(i, 2);
-    }
-
-    writer.finalize();
-
 }
