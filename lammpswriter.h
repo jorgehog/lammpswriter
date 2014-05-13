@@ -22,8 +22,8 @@ class lammpswriter
 public:
 
     lammpswriter(const uint nParticleProperties,
-                 const string path = "",
-                 const string prefix = "lammpsfile"):
+                 const string prefix = "lammpsfile",
+                 const string path = ""):
         m_systemSizeX_start(0),
         m_systemSizeY_start(0),
         m_systemSizeZ_start(0),

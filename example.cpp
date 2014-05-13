@@ -71,7 +71,7 @@ int main()
 
 
     //Create an object for writing (used only for alternative one)
-    lammpswriter writer(nParticleProperties, path, name);
+    lammpswriter writer(nParticleProperties, name, path);
 
     //Set the system size. Can also set a start position and shear.
     writer.setSystemSize(1, 1, 1);
@@ -153,7 +153,7 @@ void dumpLammps(const uint frameNumber,
                 const vec &type)
 {
     //Create an object for writing. The destructor will close the file.
-    lammpswriter writer(nParticleProperties, path, name);
+    lammpswriter writer(nParticleProperties, name, path);
 
     writer.setSystemSize(1, 1, 1);
     writer.initializeNewFile(frameNumber, nParticles);
