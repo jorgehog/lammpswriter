@@ -200,6 +200,8 @@ private:
 
         m_file.open(s.str().c_str());
 
+        _checkIfFileExists();
+
         _dumpHeader();
 
     }
@@ -262,6 +264,17 @@ private:
         if (!m_file.is_open())
         {
             throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
+        }
+#endif
+    }
+
+
+    void _checkIfFileExists()
+    {
+#ifndef NDEBUG
+        if (!m_file.good())
+        {
+            throw std::runtime_error("lammps file could not be opened. Bad path?");
         }
 #endif
     }
