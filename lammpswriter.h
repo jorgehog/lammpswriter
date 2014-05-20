@@ -94,6 +94,8 @@ public:
 
         m_inFile.open(_fileName(), std::ios::binary);
 
+        _checkIfFileExists();
+
         uint frameNumber, nChunks, chunkLength, nParticleProperties;
 
         read(frameNumber,
@@ -121,49 +123,6 @@ public:
         if (nParticleProperties != m_nParticleProperties)
         {
             throw std::logic_error("Mismatch in specified and loaded number of columns.");
-        }
-
-    }
-
-    void setSystemSize(const double systemSizeX,
-                       const double systemSizeY,
-                       const double systemSizeZ,
-                       const double systemSizeX_start = 0,
-                       const double systemSizeY_start = 0,
-                       const double systemSizeZ_start = 0)
-    {
-        m_systemSizeX = systemSizeX;
-        m_systemSizeY = systemSizeY;
-        m_systemSizeZ = systemSizeZ;
-
-        m_systemSizeX_start = systemSizeX_start;
-        m_systemSizeY_start = systemSizeY_start;
-        m_systemSizeZ_start = systemSizeZ_start;
-    }
-
-
-    void setShear(const double xShear = 0,
-                  const double yShear = 0,
-                  const double zShear = 0)
-    {
-        m_xShear = xShear;
-        m_yShear = yShear;
-        m_zShear = zShear;
-    }
-
-    static void setMPIRank(const int rank, const int nNodes, const int masterRank = 0)
-    {
-        m_MPI_master = masterRank;
-
-        m_MPI_nNodes = nNodes;
-
-        _checkMPI();
-
-        m_isMPIMaster = (rank == masterRank);
-
-        if (m_isMPIMaster)
-        {
-            m_nParticlesList.resize(nNodes);
         }
 
     }
@@ -206,6 +165,20 @@ public:
         return *this;
     }
 
+    template<typename T>
+    lammpswriter &operator >> (T &val)
+    {
+        double valueAsDouble = static_cast<double>(val);
+
+        m_inFile.read(reinterpret_cast<char*>(&valueAsDouble), sizeof(double));
+
+        m_valueCounter++;
+
+        val = static_cast<T>(valueAsDouble);
+
+        return *this;
+    }
+
     lammpswriter &operator >> (double &val)
     {
         m_inFile.read(reinterpret_cast<char*>(&val), sizeof(double));
@@ -215,9 +188,73 @@ public:
         return *this;
     }
 
+    void setSystemSize(const double systemSizeX,
+                       const double systemSizeY,
+                       const double systemSizeZ,
+                       const double systemSizeX_start = 0,
+                       const double systemSizeY_start = 0,
+                       const double systemSizeZ_start = 0)
+    {
+        _checkIfFileOpen();
+
+        m_systemSizeX = systemSizeX;
+        m_systemSizeY = systemSizeY;
+        m_systemSizeZ = systemSizeZ;
+
+        m_systemSizeX_start = systemSizeX_start;
+        m_systemSizeY_start = systemSizeY_start;
+        m_systemSizeZ_start = systemSizeZ_start;
+    }
 
 
+    void setShear(const double xShear = 0,
+                  const double yShear = 0,
+                  const double zShear = 0)
+    {
+        _checkIfFileOpen();
 
+        m_xShear = xShear;
+        m_yShear = yShear;
+        m_zShear = zShear;
+    }
+
+    static void setMPIRank(const int rank, const int nNodes, const int masterRank = 0)
+    {
+        m_MPI_master = masterRank;
+
+        m_MPI_nNodes = nNodes;
+
+        _checkMPI();
+
+        m_isMPIMaster = (rank == masterRank);
+
+        if (m_isMPIMaster)
+        {
+            m_nParticlesList.resize(nNodes);
+        }
+
+    }
+
+    void setPath(const string path)
+    {
+        _checkIfFileOpen();
+
+        m_path = path.empty() ? path : path + "/";
+    }
+
+    void setPrefix(const string prefix)
+    {
+        _checkIfFileOpen();
+
+        m_prefix = prefix;
+    }
+
+    void setNParticleProperties(const uint nParticleProperties)
+    {
+        _checkIfFileOpen();
+
+        m_nParticleProperties = nParticleProperties;
+    }
 
 
     const double &systemSizeX_start() const
@@ -267,6 +304,20 @@ public:
         return m_zShear;
     }
 
+    const uint &nParticleProperties() const
+    {
+        return m_nParticleProperties;
+    }
+
+    const string &path() const
+    {
+        return m_path;
+    }
+
+    const string &prefix() const
+    {
+        return m_prefix;
+    }
 
     const uint &nParticles() const
     {
@@ -276,6 +327,7 @@ public:
     {
         return m_totalParticles;
     }
+
 
 private:
 
@@ -425,18 +477,20 @@ private:
     void _checkIfFileExists()
     {
 #ifndef NDEBUG
+        string error = "lammps file could not be opened. Bad file? " + string(_fileName());
+
         if (m_fileState == OUT)
         {
             if (!m_file.good())
             {
-                throw std::runtime_error("lammps file could not be opened. Bad path?");
+                throw std::runtime_error(error);
             }
         }
         else
         {
             if (!m_inFile.good())
             {
-                throw std::runtime_error("lammps file could not be opened. Bad path?");
+                throw std::runtime_error(error);
             }
         }
 #endif
