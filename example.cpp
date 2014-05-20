@@ -118,6 +118,10 @@ int main()
             timer.tic();
             writer.loadFile(c);
 
+            cout << writer.systemSizeX() << endl;
+            cout << writer.systemSizeY() << endl;
+            cout << writer.systemSizeZ() << endl;
+
             for (uint i = 0; i < nParticles; ++i)
             {
                 writer >> type

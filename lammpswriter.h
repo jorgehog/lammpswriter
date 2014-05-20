@@ -280,12 +280,12 @@ public:
 
     const double &systemSizeY() const
     {
-        return m_systemSizeX;
+        return m_systemSizeY;
     }
 
     const double &systemSizeZ() const
     {
-        return m_systemSizeX;
+        return m_systemSizeZ;
     }
 
 
