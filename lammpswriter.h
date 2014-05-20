@@ -10,6 +10,7 @@
 #include <mpi.h>
 #endif
 
+using std::ifstream;
 using std::ofstream;
 using std::string;
 using std::cout;
@@ -44,7 +45,6 @@ public:
 
     }
 
-
     ~lammpswriter()
     {
         _checkIfFileOpen();
@@ -56,6 +56,8 @@ public:
 
     void initializeNewFile(const uint frameNumber, const uint nParticles)
     {
+        m_fileState = OUT;
+
         m_frameNumber = frameNumber;
 
         m_nParticles = nParticles;
@@ -71,9 +73,55 @@ public:
 
         _checkParticlePropertySize();
 
-        _dumpFile();
+        if (m_fileState == OUT)
+        {
+            _dumpFile();
+        }
+        else
+        {
+            m_inFile.close();
+        }
 
         m_valueCounter = 0;
+
+    }
+
+    void loadFile(const uint framenNumber)
+    {
+        m_fileState = IN;
+
+        m_frameNumber = framenNumber;
+
+        m_inFile.open(_fileName(), std::ios::binary);
+
+        uint frameNumber, nChunks, chunkLength, nParticleProperties;
+
+        read(frameNumber,
+             m_totalParticles,
+             m_systemSizeX_start,
+             m_systemSizeX,
+             m_systemSizeY_start,
+             m_systemSizeY,
+             m_systemSizeZ_start,
+             m_systemSizeZ,
+             m_xShear,
+             m_yShear,
+             m_zShear,
+             nParticleProperties,
+             nChunks,
+             chunkLength);
+
+        m_nParticles = m_totalParticles;
+
+        if (frameNumber != m_frameNumber)
+        {
+            throw std::logic_error("Mismatch in specified and loaded frame.");
+        }
+
+        if (nParticleProperties != m_nParticleProperties)
+        {
+            throw std::logic_error("Mismatch in specified and loaded number of columns.");
+        }
 
     }
 
@@ -136,6 +184,21 @@ public:
         m_file.write(reinterpret_cast<const char*>(&val), sizeof(val));
     }
 
+    template<typename T, typename ...Args>
+    void read(T &val, Args&... args)
+    {
+        read<T>(val);
+        read(args...);
+    }
+
+    template<typename T>
+    void read(T &val)
+    {
+        _checkIfFileClosed();
+
+        m_inFile.read(reinterpret_cast<char*>(&val), sizeof(T));
+    }
+
     template<typename T>
     lammpswriter &operator << (const T &val)
     {
@@ -143,9 +206,78 @@ public:
         return *this;
     }
 
+    lammpswriter &operator >> (double &val)
+    {
+        m_inFile.read(reinterpret_cast<char*>(&val), sizeof(double));
+
+        m_valueCounter++;
+
+        return *this;
+    }
+
+
+
+
+
+
+    const double &systemSizeX_start() const
+    {
+        return m_systemSizeX_start;
+    }
+
+    const double &systemSizeY_start() const
+    {
+        return m_systemSizeY_start;
+    }
+
+    const double &systemSizeZ_start() const
+    {
+        return m_systemSizeZ_start;
+    }
+
+
+    const double &systemSizeX() const
+    {
+        return m_systemSizeX;
+    }
+
+    const double &systemSizeY() const
+    {
+        return m_systemSizeX;
+    }
+
+    const double &systemSizeZ() const
+    {
+        return m_systemSizeX;
+    }
+
+
+    const double &xShear() const
+    {
+        return m_xShear;
+    }
+
+    const double &yShear() const
+    {
+        return m_yShear;
+    }
+
+    const double &zShear() const
+    {
+        return m_zShear;
+    }
+
+
+    const uint &nParticles() const
+    {
+        return m_nParticles;
+    }
+    const uint &totalParticles() const
+    {
+        return m_totalParticles;
+    }
 
 private:
-
 
     double m_systemSizeX_start;
     double m_systemSizeY_start;
@@ -159,10 +291,17 @@ private:
     double m_yShear;
     double m_zShear;
 
+
     static int m_MPI_master;
     static bool m_isMPIMaster;
     static int m_MPI_nNodes;
     static vector<int> m_nParticlesList;
+
+    enum fileState
+    {
+        IN,
+        OUT
+    } m_fileState;
 
 
     uint m_valueCounter;
@@ -176,13 +315,21 @@ private:
     vector<double> m_allValues;
 
     ofstream m_file;
+    ifstream m_inFile;
 
     uint m_nParticles;
     uint m_totalParticles;
 
     uint m_frameNumber;
 
+    const char *_fileName() const
+    {
+        std::stringstream s;
 
+        s << m_path << m_prefix << m_frameNumber << ".lmp";
+
+        return s.str().c_str();
+    }
 
     void _initialize()
     {
@@ -194,11 +341,7 @@ private:
             return;
         }
 
-        std::stringstream s;
-
-        s << m_path << m_prefix << m_frameNumber << ".lmp";
-
-        m_file.open(s.str().c_str());
+        m_file.open(_fileName(), std::ios::binary);
 
         _checkIfFileExists();
 
@@ -261,9 +404,19 @@ private:
     void _checkIfFileClosed()
     {
 #ifndef NDEBUG
-        if (!m_file.is_open())
+        if (m_fileState == OUT)
         {
-            throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
+            if (!m_file.is_open())
+            {
+                throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
+            }
+        }
+        else
+        {
+            if (!m_inFile.is_open())
+            {
+                throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
+            }
         }
 #endif
     }
@@ -272,9 +425,19 @@ private:
     void _checkIfFileExists()
     {
 #ifndef NDEBUG
-        if (!m_file.good())
+        if (m_fileState == OUT)
         {
-            throw std::runtime_error("lammps file could not be opened. Bad path?");
+            if (!m_file.good())
+            {
+                throw std::runtime_error("lammps file could not be opened. Bad path?");
+            }
+        }
+        else
+        {
+            if (!m_inFile.good())
+            {
+                throw std::runtime_error("lammps file could not be opened. Bad path?");
+            }
         }
 #endif
     }

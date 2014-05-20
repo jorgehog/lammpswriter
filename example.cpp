@@ -13,7 +13,7 @@
 //This yields a slower file dump, but ensures stable and pain free file dump regardless of memory available and number of nodes active.
 //#define LAMMPSWRITER_LOW_MEMORY
 
-#include "lammpswriter/lammpswriter.h"
+#include "lammpswriter.h"
 
 using namespace arma;
 using namespace std;
@@ -107,6 +107,45 @@ int main()
     if (rank == 0)
     {
         cout << "dump took " << t/nCycles*1000 << " ms per cycle." << endl;
+        t = 0;
+
+        double type;
+        double posAvg = 0;
+        double velAvg = 0;
+        for (uint c = 0; c < nCycles; ++c)
+        {
+
+            timer.tic();
+            writer.loadFile(c);
+
+            for (uint i = 0; i < nParticles; ++i)
+            {
+                writer >> type
+                       >> pos(i, 0)
+                       >> pos(i, 1)
+                       >> pos(i, 2)
+                       >> vel(i, 0)
+                       >> vel(i, 1)
+                       >> vel(i, 2);
+            }
+
+            writer.finalize();
+            t += timer.toc();
+
+            pos.col(0) /= boxSize(0);
+            pos.col(1) /= boxSize(1);
+            pos.col(2) /= boxSize(2);
+
+            posAvg += accu(pos);
+            velAvg += accu(vel);
+
+        }
+
+        cout << "read took " << t/nCycles*1000 << " ms per cycle" << endl;
+
+        cout << "\nmean scaled position: " << posAvg/(3*nParticles*nCycles) << endl;
+        cout << "mean scaled velocity: "   << velAvg/(3*nParticles*nCycles) << endl;
+
     }
 
 
