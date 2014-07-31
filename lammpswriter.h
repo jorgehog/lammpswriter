@@ -2,7 +2,7 @@
 
 #include <fstream>
 #include <sstream>
-#include <exception>
+#include <stdexcept>
 #include <vector>
 #include <numeric>
 
@@ -13,8 +13,6 @@
 using std::ifstream;
 using std::ofstream;
 using std::string;
-using std::cout;
-using std::endl;
 using std::vector;
 
 class lammpswriter
@@ -25,6 +23,8 @@ public:
     lammpswriter(const uint nParticleProperties,
                  const string prefix = "lammpsfile",
                  const string path = ""):
+        m_systemSizeSet(false),
+
         m_systemSizeX_start(0),
         m_systemSizeY_start(0),
         m_systemSizeZ_start(0),
@@ -36,6 +36,9 @@ public:
         m_xShear(0),
         m_yShear(0),
         m_zShear(0),
+
+        m_MPI_master(0),
+        m_isMPIMaster(true),
 
         m_valueCounter(0),
         m_nParticleProperties(nParticleProperties),
@@ -204,6 +207,8 @@ public:
         m_systemSizeX_start = systemSizeX_start;
         m_systemSizeY_start = systemSizeY_start;
         m_systemSizeZ_start = systemSizeZ_start;
+
+        m_systemSizeSet = true;
     }
 
 
@@ -218,7 +223,7 @@ public:
         m_zShear = zShear;
     }
 
-    static void setMPIRank(const int rank, const int nNodes, const int masterRank = 0)
+    void setMPIRank(const int rank, const int nNodes, const int masterRank = 0)
     {
         m_MPI_master = masterRank;
 
@@ -331,6 +336,8 @@ public:
 
 private:
 
+    bool m_systemSizeSet;
+
     double m_systemSizeX_start;
     double m_systemSizeY_start;
     double m_systemSizeZ_start;
@@ -343,11 +350,10 @@ private:
     double m_yShear;
     double m_zShear;
 
-
-    static int m_MPI_master;
-    static bool m_isMPIMaster;
-    static int m_MPI_nNodes;
-    static vector<int> m_nParticlesList;
+    int m_MPI_master;
+    bool m_isMPIMaster;
+    int m_MPI_nNodes;
+    vector<int> m_nParticlesList;
 
     enum fileState
     {
@@ -435,12 +441,19 @@ private:
 
     void _checkSystemSize()
     {
-        if (m_systemSizeX_start >= m_systemSizeX ||
+#ifndef NDEBUG
+        if (!m_systemSizeSet)
+        {
+            throw std::runtime_error("System size not set. Forgot to call setSystemSize()?");
+        }
+
+        else if (m_systemSizeX_start >= m_systemSizeX ||
                 m_systemSizeY_start >= m_systemSizeY ||
                 m_systemSizeZ_start >= m_systemSizeZ)
         {
             throw std::runtime_error("Inconsistent system sizes.");
         }
+#endif
     }
 
     void _checkIfFileOpen()
@@ -448,7 +461,7 @@ private:
 #ifndef NDEBUG
         if (m_file.is_open())
         {
-            throw std::runtime_error("lammps file is already open. (Forgot to call finalize()?)");
+            throw std::runtime_error("lammps file is already open. Forgot to call finalize()?");
         }
 #endif
     }
@@ -460,14 +473,14 @@ private:
         {
             if (!m_file.is_open())
             {
-                throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
+                throw std::runtime_error("lammps file is not open. Forgot to call initializeNewFile()?");
             }
         }
         else
         {
             if (!m_inFile.is_open())
             {
-                throw std::runtime_error("lammps file is not open. (Forgot to call initializeNewFile()?)");
+                throw std::runtime_error("lammps file is not open. Forgot to call initializeNewFile()?");
             }
         }
 #endif
@@ -519,7 +532,7 @@ private:
 #endif
     }
 
-    static void _checkMPI()
+    void _checkMPI()
     {
 #ifndef NDEBUG
 #ifdef LAMMPSWRITER_LOW_MEMORY
@@ -636,8 +649,3 @@ private:
     }
 
 };
-
-int  lammpswriter::m_MPI_master = 0;
-bool lammpswriter::m_isMPIMaster = true;
-int  lammpswriter::m_MPI_nNodes;
-vector<int>    lammpswriter::m_nParticlesList;
