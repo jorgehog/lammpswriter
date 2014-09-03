@@ -1,5 +1,8 @@
 #pragma once
 
+#include "datahandler.h"
+
+#include <sys/types.h>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -43,7 +46,9 @@ public:
         m_valueCounter(0),
         m_nParticleProperties(nParticleProperties),
         m_path(path.empty() ? path : path + "/"),
-        m_prefix(prefix)
+        m_prefix(prefix),
+
+        m_dataHandler(NULL)
     {
 
     }
@@ -52,23 +57,25 @@ public:
     {
         _checkIfFileOpen();
 
-        m_myValues.clear();
+        delete m_dataHandler;
+
         m_allValues.clear();
 
     }
 
     void initializeNewFile(const uint frameNumber, const uint nParticles)
     {
-        m_fileState = OUT;
+       _initializeFrame(frameNumber, new _lammpswriterDataHandler::DeterminedSize(nParticles*m_nParticleProperties));
+    }
 
-        m_frameNumber = frameNumber;
+    void initializeNewFile(const uint frameNumber)
+    {
+       _initializeFrame(frameNumber, new _lammpswriterDataHandler::UndeterminedSize());
+    }
 
-        m_nParticles = nParticles;
-
-        _checkIfFileOpen();
-
-        _initialize();
-
+    void initializeNewFile()
+    {
+        initializeNewFile(0);
     }
 
     void finalize()
@@ -76,8 +83,12 @@ public:
 
         _checkParticlePropertySize();
 
+        m_nParticles = m_valueCounter / m_nParticleProperties;
+
         if (m_fileState == OUT)
         {
+            _dumpHeader();
+
             _dumpFile();
         }
         else
@@ -88,48 +99,6 @@ public:
         m_valueCounter = 0;
 
     }
-
-    void loadFile(const uint framenNumber)
-    {
-        m_fileState = IN;
-
-        m_frameNumber = framenNumber;
-
-        m_inFile.open(_fileName(), std::ios::binary);
-
-        _checkIfFileExists();
-
-        uint frameNumber, nChunks, chunkLength, nParticleProperties;
-
-        read(frameNumber,
-             m_totalParticles,
-             m_systemSizeX_start,
-             m_systemSizeX,
-             m_systemSizeY_start,
-             m_systemSizeY,
-             m_systemSizeZ_start,
-             m_systemSizeZ,
-             m_xShear,
-             m_yShear,
-             m_zShear,
-             nParticleProperties,
-             nChunks,
-             chunkLength);
-
-        m_nParticles = m_totalParticles;
-
-        if (frameNumber != m_frameNumber)
-        {
-            throw std::logic_error("Mismatch in specified and loaded frame.");
-        }
-
-        if (nParticleProperties != m_nParticleProperties)
-        {
-            throw std::logic_error("Mismatch in specified and loaded number of columns.");
-        }
-
-    }
-
 
     template<typename T, typename ...Args>
     void write(const T &val, const Args&... args)
@@ -166,7 +135,8 @@ public:
     {
         _checkIfFileClosed();
 
-        m_myValues[m_valueCounter++] = static_cast<double>(val);
+        m_dataHandler->push(static_cast<double>(val), m_valueCounter++);
+
         return *this;
     }
 
@@ -191,6 +161,46 @@ public:
         m_valueCounter++;
 
         return *this;
+    }
+
+
+    void loadFile(const uint framenNumber)
+    {
+        m_fileState = IN;
+
+        m_frameNumber = framenNumber;
+
+        m_inFile.open(_fileName(), std::ios::binary);
+
+        _checkIfFileExists();
+
+        uint frameNumber, nChunks, chunkLength, nParticleProperties;
+
+        read(frameNumber,
+             m_totalParticles,
+             m_systemSizeX_start,
+             m_systemSizeX,
+             m_systemSizeY_start,
+             m_systemSizeY,
+             m_systemSizeZ_start,
+             m_systemSizeZ,
+             m_xShear,
+             m_yShear,
+             m_zShear,
+             nParticleProperties,
+             nChunks,
+             chunkLength);
+
+        if (frameNumber != m_frameNumber)
+        {
+            throw std::logic_error("Mismatch in specified and loaded frame.");
+        }
+
+        if (nParticleProperties != m_nParticleProperties)
+        {
+            throw std::logic_error("Mismatch in specified and loaded number of columns.");
+        }
+
     }
 
     void setSystemSize(const double systemSizeX,
@@ -326,10 +336,11 @@ public:
         return m_prefix;
     }
 
-    const uint &nParticles() const
+    uint nParticles() const
     {
-        return m_nParticles;
+        return m_dataHandler->size()/m_nParticleProperties;
     }
+
     const uint &totalParticles() const
     {
         return m_totalParticles;
@@ -363,7 +374,6 @@ private:
         OUT
     } m_fileState;
 
-
     uint m_valueCounter;
 
     uint m_nParticleProperties;
@@ -371,8 +381,9 @@ private:
     string m_path;
     string m_prefix;
 
-    vector<double> m_myValues;
     vector<double> m_allValues;
+
+    _lammpswriterDataHandler::Base *m_dataHandler;
 
     ofstream m_file;
     ifstream m_inFile;
@@ -391,10 +402,23 @@ private:
         return s.str().c_str();
     }
 
+    void _initializeFrame(const uint frameNumber, _lammpswriterDataHandler::Base *dataHandler)
+    {
+        m_fileState = OUT;
+
+        m_frameNumber = frameNumber;
+
+        m_dataHandler = dataHandler;
+
+        _checkIfFileOpen();
+
+        _initialize();
+    }
+
     void _initialize()
     {
 
-        m_myValues.resize(m_nParticles*m_nParticleProperties);
+        m_dataHandler->initialize();
 
         if (!m_isMPIMaster)
         {
@@ -404,8 +428,6 @@ private:
         m_file.open(_fileName(), std::ios::binary);
 
         _checkIfFileExists();
-
-        _dumpHeader();
 
     }
 
@@ -441,17 +463,108 @@ private:
     }
 
 
+
+
+
+    void _dumpFile()
+    {
+#ifdef LAMMPSWRITER_USE_MPI
+        if (m_MPI_nNodes != 1)
+        {
+
+            int *displacements = NULL;
+            int *recvCounts = NULL;
+
+            if (m_isMPIMaster)
+            {
+
+                displacements = new int[m_MPI_nNodes];
+                recvCounts = new int[m_MPI_nNodes];
+
+                int currentDisplacement = 0;
+                for (int i = 0; i < m_MPI_nNodes; ++i)
+                {
+                    displacements[i] = currentDisplacement;
+
+                    recvCounts[i] = m_nParticlesList[i]*m_nParticleProperties;
+
+                    currentDisplacement += recvCounts[i];
+                }
+#ifndef LAMMPSWRITER_LOW_MEMORY
+                m_allValues.resize(m_totalParticles*m_nParticleProperties);
+#endif
+            }
+
+#ifndef LAMMPSWRITER_LOW_MEMORY
+            MPI_Gatherv(&m_dataHandler->myValues().front(),
+                        m_dataHandler->size(),
+                        MPI_DOUBLE,
+                        &m_allValues.front(),
+                        recvCounts,
+                        displacements,
+                        MPI_DOUBLE,
+                        m_MPI_master,
+                        MPI_COMM_WORLD);
+#else
+            if (m_isMPIMaster)
+            {
+                _simpleDump();
+
+                for (uint node = 1; node < m_MPI_nNodes; node++)
+                {
+                    m_myValues.resize(recvCounts[node]);
+                    MPI_Recv(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, node, 0, MPI_COMM_WORLD, NULL);
+
+                    m_nParticles = m_nParticlesList[node];
+                    _simpleDump();
+                }
+            }
+
+            else
+            {
+                MPI_Send(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+            }
+#endif
+
+
+            if (m_isMPIMaster)
+            {
+#ifndef LAMMPSWRITER_LOW_MEMORY
+                m_file.write(reinterpret_cast<const char*>(&m_allValues.front()), m_totalParticles*m_nParticleProperties*sizeof(double));
+#endif
+
+                delete [] recvCounts;
+                delete [] displacements;
+            }
+        }
+
+        else
+        {
+            _simpleDump();
+        }
+
+#else
+        _simpleDump();
+#endif
+        m_file.close();
+    }
+
+    void _simpleDump()
+    {
+        m_file.write(reinterpret_cast<const char*>(&m_dataHandler->myValues().front()), m_dataHandler->size()*sizeof(double));
+    }
+
     void _checkSystemSize()
     {
 #ifndef NDEBUG
         if (!m_systemSizeSet)
         {
-            throw std::runtime_error("System size not set. Forgot to call setSystemSize()?");
+            throw std::runtime_error("System size not set. Forgot to call setSystemSize() before initialize?");
         }
 
         else if (m_systemSizeX_start >= m_systemSizeX ||
-                m_systemSizeY_start >= m_systemSizeY ||
-                m_systemSizeZ_start >= m_systemSizeZ)
+                 m_systemSizeY_start >= m_systemSizeY ||
+                 m_systemSizeZ_start >= m_systemSizeZ)
         {
             throw std::runtime_error("Inconsistent system sizes.");
         }
@@ -519,18 +632,25 @@ private:
             return;
         }
 
-        const uint nParticlePropertiesSaved = m_valueCounter/m_nParticles;
-        const double _check = m_valueCounter/(double)m_nParticles;
+        const double nParticlePropertiesSaved = m_valueCounter/(double)nParticles();
+        const double _check = m_valueCounter/(double)nParticles();
+
+        if (fabs(nParticlePropertiesSaved - (int)m_nParticleProperties) > 0.01)
+        {
+            std::stringstream s;
+            s << "Saved number of particle properties does not match the specified number: " << nParticlePropertiesSaved << " is stored, and " << m_nParticleProperties << " is requested. ";
+
+            throw std::runtime_error(s.str());
+        }
 
         if (nParticlePropertiesSaved != _check)
         {
-            throw std::runtime_error("Uneven number of particle properties saved.");
+            std::stringstream s;
+            s << "Uneven number of particle properties saved: " << nParticlePropertiesSaved << " is stored, and " << _check << " is requested. ";
+
+            throw std::runtime_error(s.str());
         }
 
-        if (nParticlePropertiesSaved != m_nParticleProperties)
-        {
-            throw std::runtime_error("Saved number of particle properties does not match the specified number");
-        }
 #endif
     }
 
@@ -550,6 +670,7 @@ private:
     {
 #ifdef LAMMPSWRITER_USE_MPI
 
+        uint m_nParticles = nParticles();
         MPI_Gather(&m_nParticles, 1, MPI_INT, &m_nParticlesList.front(), 1, MPI_INT, m_MPI_master, MPI_COMM_WORLD);
 
         if (m_isMPIMaster)
@@ -558,96 +679,10 @@ private:
         }
 
 #else
-        m_totalParticles = m_nParticles;
+        m_totalParticles = nParticles();
 #endif
     }
 
-    void _dumpFile()
-    {
-#ifdef LAMMPSWRITER_USE_MPI
-        if (m_MPI_nNodes != 1)
-        {
 
-            int *displacements = NULL;
-            int *recvCounts = NULL;
-
-            if (m_isMPIMaster)
-            {
-
-                displacements = new int[m_MPI_nNodes];
-                recvCounts = new int[m_MPI_nNodes];
-
-                int currentDisplacement = 0;
-                for (int i = 0; i < m_MPI_nNodes; ++i)
-                {
-                    displacements[i] = currentDisplacement;
-
-                    recvCounts[i] = m_nParticlesList[i]*m_nParticleProperties;
-
-                    currentDisplacement += recvCounts[i];
-                }
-#ifndef LAMMPSWRITER_LOW_MEMORY
-                m_allValues.resize(m_totalParticles*m_nParticleProperties);
-#endif
-            }
-
-#ifndef LAMMPSWRITER_LOW_MEMORY
-            MPI_Gatherv(&m_myValues.front(),
-                        m_myValues.size(),
-                        MPI_DOUBLE,
-                        &m_allValues.front(),
-                        recvCounts,
-                        displacements,
-                        MPI_DOUBLE,
-                        m_MPI_master,
-                        MPI_COMM_WORLD);
-#else
-            if (m_isMPIMaster)
-            {
-                _simpleDump();
-
-                for (uint node = 1; node < m_MPI_nNodes; node++)
-                {
-                    m_myValues.resize(recvCounts[node]);
-                    MPI_Recv(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, node, 0, MPI_COMM_WORLD, NULL);
-
-                    m_nParticles = m_nParticlesList[node];
-                    _simpleDump();
-                }
-            }
-
-            else
-            {
-                MPI_Send(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-            }
-#endif
-
-
-            if (m_isMPIMaster)
-            {
-#ifndef LAMMPSWRITER_LOW_MEMORY
-                m_file.write(reinterpret_cast<const char*>(&m_allValues.front()), m_totalParticles*m_nParticleProperties*sizeof(double));
-#endif
-
-                delete [] recvCounts;
-                delete [] displacements;
-            }
-        }
-
-        else
-        {
-            _simpleDump();
-        }
-
-#else
-        _simpleDump();
-#endif
-        m_file.close();
-    }
-
-    void _simpleDump()
-    {
-        m_file.write(reinterpret_cast<const char*>(&m_myValues.front()), m_nParticles*m_nParticleProperties*sizeof(double));
-    }
 
 };
