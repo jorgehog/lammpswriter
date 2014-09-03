@@ -27,9 +27,14 @@ public:
         return m_myValues.size();
     }
 
-    const vector<double> &myValues() const
+    vector<double> &myValues()
     {
         return m_myValues;
+    }
+
+    void resize(const uint N)
+    {
+        m_myValues.resize(N);
     }
 
 protected:

@@ -7,7 +7,7 @@
 //#define NDEBUG
 
 //Defining LAMMPSWRITER_USE_MPI enabled MPI support (_n, where n = rank, appended to file name)
-#define LAMMPSWRITER_USE_MPI
+//#define LAMMPSWRITER_USE_MPI
 
 //Defining LAMMSWRITER_LOW_MEMORY enabled such that multiple data sets never gets stored simultaneously on a single node.
 //This yields a slower file dump, but ensures stable and pain free file dump regardless of memory available and number of nodes active.
@@ -39,9 +39,6 @@ int main()
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     srand(21321321 + rank); //Set a unique seed per process
-
-    //Set the MPI rank and the master rank
-    lammpswriter::setMPIRank(rank, nProcs);
 #endif
 
 
@@ -66,6 +63,11 @@ int main()
     //Set the system size. Can also set a start position and shear.
     uvec boxSize = {100, 150, 200};
     writer.setSystemSize(boxSize(0), boxSize(1), boxSize(2));
+
+#ifdef LAMMPSWRITER_USE_MPI
+    //Set the MPI rank and the master rank
+    writer.setMPIRank(rank, nProcs);
+#endif
 
     uint nCycles = 1000;
 

@@ -510,10 +510,10 @@ private:
             {
                 _simpleDump();
 
-                for (uint node = 1; node < m_MPI_nNodes; node++)
+                for (int node = 1; node < m_MPI_nNodes; node++)
                 {
-                    m_myValues.resize(recvCounts[node]);
-                    MPI_Recv(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, node, 0, MPI_COMM_WORLD, NULL);
+                    m_dataHandler->resize(recvCounts[node]);
+                    MPI_Recv(&m_dataHandler->myValues().front(), m_dataHandler->size(), MPI_DOUBLE, node, 0, MPI_COMM_WORLD, NULL);
 
                     m_nParticles = m_nParticlesList[node];
                     _simpleDump();
@@ -522,7 +522,7 @@ private:
 
             else
             {
-                MPI_Send(&m_myValues.front(), m_myValues.size(), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+                MPI_Send(&m_dataHandler->myValues().front(), m_dataHandler->size(), MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
             }
 #endif
 

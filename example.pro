@@ -13,5 +13,5 @@ QMAKE_CXXFLAGS += $$system(mpicxx --showme:compile) -DMPICH_IGNORE_CXX_SEEK  #--
 QMAKE_CXXFLAGS += -std=c++11
 
 SOURCES += example.cpp
-HEADERS += lammpswriter.h
+HEADERS += lammpswriter.h datahandler.h
 
