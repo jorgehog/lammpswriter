@@ -164,6 +164,8 @@ public:
     template<typename T>
     lammpswriter &operator << (const T &val)
     {
+        _checkIfFileClosed();
+
         m_myValues[m_valueCounter++] = static_cast<double>(val);
         return *this;
     }
