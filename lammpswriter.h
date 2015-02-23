@@ -170,7 +170,7 @@ public:
 
         m_frameNumber = framenNumber;
 
-        m_inFile.open(_fileName(), std::ios::binary);
+        m_inFile.open(_fileName().c_str(), std::ios::binary);
 
         _checkIfFileExists();
 
@@ -393,13 +393,13 @@ private:
 
     uint m_frameNumber;
 
-    const char *_fileName() const
+    string _fileName() const
     {
         std::stringstream s;
 
         s << m_path << m_prefix << m_frameNumber << ".lmp";
 
-        return s.str().c_str();
+        return s.str();
     }
 
     void _initializeFrame(const uint frameNumber, _lammpswriterDataHandler::Base *dataHandler)
@@ -425,7 +425,7 @@ private:
             return;
         }
 
-        m_file.open(_fileName(), std::ios::binary);
+        m_file.open(_fileName().c_str(), std::ios::binary);
 
         _checkIfFileExists();
 
@@ -605,20 +605,21 @@ private:
     void _checkIfFileExists()
     {
 #ifndef NDEBUG
-        string error = "lammps file could not be opened. Bad file? " + string(_fileName());
+        std::stringstream error;
+        error << "lammps file could not be opened. Bad file? " << _fileName();
 
         if (m_fileState == OUT)
         {
             if (!m_file.good())
             {
-                throw std::runtime_error(error);
+                throw std::runtime_error(error.str());
             }
         }
         else
         {
             if (!m_inFile.good())
             {
-                throw std::runtime_error(error);
+                throw std::runtime_error(error.str());
             }
         }
 #endif
