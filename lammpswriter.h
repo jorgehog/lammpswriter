@@ -48,7 +48,7 @@ public:
         m_path(path.empty() ? path : path + "/"),
         m_prefix(prefix),
 
-        m_dataHandler(NULL)
+        m_dataHandler(nullptr)
     {
 
     }
@@ -472,8 +472,8 @@ private:
         if (m_MPI_nNodes != 1)
         {
 
-            int *displacements = NULL;
-            int *recvCounts = NULL;
+            int *displacements = nullptr;
+            int *recvCounts = nullptr;
 
             if (m_isMPIMaster)
             {
