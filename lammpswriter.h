@@ -562,9 +562,9 @@ private:
             throw std::runtime_error("System size not set. Forgot to call setSystemSize() before initialize?");
         }
 
-        else if (m_systemSizeX_start >= m_systemSizeX ||
-                 m_systemSizeY_start >= m_systemSizeY ||
-                 m_systemSizeZ_start >= m_systemSizeZ)
+        else if (m_systemSizeX_start > m_systemSizeX ||
+                 m_systemSizeY_start > m_systemSizeY ||
+                 m_systemSizeZ_start > m_systemSizeZ)
         {
             throw std::runtime_error("Inconsistent system sizes.");
         }
