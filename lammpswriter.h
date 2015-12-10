@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <vector>
 #include <numeric>
+#include <cmath>
 
 #ifdef LAMMPSWRITER_USE_MPI
 #include <mpi.h>
