@@ -2,6 +2,7 @@
 
 #include <sys/types.h>
 #include <vector>
+#include <stdexcept>
 
 using std::vector;
 
