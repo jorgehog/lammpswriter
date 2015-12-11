@@ -57,8 +57,6 @@ public:
     {
         _checkIfFileOpen();
 
-        delete m_dataHandler;
-
         m_allValues.clear();
 
     }
@@ -90,6 +88,8 @@ public:
             _dumpHeader();
 
             _dumpFile();
+
+            delete m_dataHandler;
         }
         else
         {
@@ -344,6 +344,11 @@ public:
     const uint &totalParticles() const
     {
         return m_totalParticles;
+    }
+
+    const uint &valueCounter() const
+    {
+        return m_valueCounter;
     }
 
 
